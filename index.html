@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>TESTE DE CHAT</title>
+    <style>
+      ul { list-style-type: none; margin: 0; padding: 0; }
+      li { padding: 8px; margin-bottom: 1px; background-color: #f4f4f4; }
+      input { padding: 10px; width: calc(100% - 22px); }
+      #chat { display: none; }
+    </style>
+  </head>
+  <body>
+    <div id="name-selection">
+      <h2>Digite seu nome</h2>
+      <input id="username" placeholder="Seu nome" />
+      <button onclick="setName()">Entrar</button>
+    </div>
+
+    <div id="room-selection" style="display: none;">
+      <h2>Escolha uma Sala</h2>
+      <button id="room1" onclick="joinRoom('Sala 1')">Sala 1</button>
+      <button id="room2" onclick="joinRoom('Sala 2')">Sala 2</button>
+      <button id="room3" onclick="joinRoom('Sala 3')">Sala 3</button>
+    </div>
+
+    <div id="chat" style="display: none;">
+      <h2 id="room-name"></h2>
+      <ul id="messages"></ul>
+      <input id="m" autocomplete="off" /><button onclick="sendMessage()">Send</button>
+      <button onclick="leaveRoom()">Sair da Sala</button>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+      const socket = io();
+      let currentRoom = '';
+      let username = '';
+
+      function setName() {
+        username = document.getElementById('username').value;
+        if (username) {
+          localStorage.setItem('username', username);
+          document.getElementById('name-selection').style.display = 'none';
+          document.getElementById('room-selection').style.display = 'block';
+
+          const savedRoom = localStorage.getItem('currentRoom');
+          if (savedRoom) {
+            joinRoom(savedRoom);
+          }
+        } else {
+          alert('Por favor, insira um nome.');
+        }
+      }
+
+      function joinRoom(room) {
+        currentRoom = room;
+        localStorage.setItem('currentRoom', room);
+        document.getElementById('room-selection').style.display = 'none';
+        document.getElementById('chat').style.display = 'block';
+        document.getElementById('room-name').textContent = room;
+        socket.emit('join room', room);
+
+        // Carregar o histórico de mensagens do localStorage
+        const storedMessages = localStorage.getItem(`chat_${room}`);
+        if (storedMessages) {
+          const messages = JSON.parse(storedMessages);
+          messages.forEach(({ name, msg }) => {
+            displayMessage(name, msg);
+          });
+        }
+      }
+
+      function leaveRoom() {
+        localStorage.removeItem('currentRoom');
+        document.getElementById('chat').style.display = 'none';
+        document.getElementById('room-selection').style.display = 'block';
+        document.getElementById('messages').innerHTML = '';
+      }
+
+      socket.on('chat message', function({ name, msg }) {
+        displayMessage(name, msg);
+
+        // Salvar a mensagem no localStorage
+        const storedMessages = localStorage.getItem(`chat_${currentRoom}`);
+        let messages = storedMessages ? JSON.parse(storedMessages) : [];
+        messages.push({ name, msg });
+        localStorage.setItem(`chat_${currentRoom}`, JSON.stringify(messages));
+      });
+
+      function displayMessage(name, msg) {
+        const item = document.createElement('li');
+        item.textContent = `${name}: ${msg}`;
+        document.getElementById('messages').appendChild(item);
+      }
+
+      function sendMessage() {
+        const input = document.getElementById('m');
+        if (input.value) {
+          socket.emit('chat message', { room: currentRoom, name: username, msg: input.value });
+          input.value = '';
+        }
+      }
+
+      addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+          sendMessage();
+        }
+      });
+
+      // Atualizar contagem de usuários online nas salas
+      socket.on('room counts', (counts) => {
+        document.getElementById('room1').textContent = `Sala 1 (${counts['Sala 1'] || 0} online)`;
+        document.getElementById('room2').textContent = `Sala 2 (${counts['Sala 2'] || 0} online)`;
+        document.getElementById('room3').textContent = `Sala 3 (${counts['Sala 3'] || 0} online)`;
+      });
+
+      // Check if username and room are already saved
+      window.onload = () => {
+        const savedName = localStorage.getItem('username');
+        if (savedName) {
+          username = savedName;
+          document.getElementById('name-selection').style.display = 'none';
+
+          const savedRoom = localStorage.getItem('currentRoom');
+          if (savedRoom) {
+            joinRoom(savedRoom);
+          } else {
+            document.getElementById('room-selection').style.display = 'block';
+          }
+        }
+      };
+    </script>
+  </body>
+</html>
